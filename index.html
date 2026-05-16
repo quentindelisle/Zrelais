@@ -1444,18 +1444,6 @@ function renderRelayHistory() {
   list.innerHTML = html;
 }
 
-/* Legacy stubs for removed functions */
-function nextRelay() { backToRelayHub(); }
-function queueRetryLater() { backToRelayHub(); }
-function showRelayNavPanel() { backToRelayHub(); }
-function renderRelayPairSelect() {}
-function jumpToRelayPair(idx) { selectRelayPair(idx); startSelectedRelay(); }
-
-function goToFinalResults() {
-  showPage('results');
-  renderResults();
-}
-
 /* Recovery timer — refresh hub every 10s if on hub page */
 setInterval(() => {
   if (app.currentPage === 'relay-hub') renderRelayHub();
@@ -1933,7 +1921,7 @@ function retryLaterRelay() {
 function askReopen() {
   openConfirm(
     'Refaire ce passage ?',
-    'Vous avez conservé cette performance. Voulez-vous quand même la refaire ? L'ancienne performance sera gardée dans l'historique.',
+    "Vous avez conservé cette performance. Voulez-vous quand même la refaire ? L'ancienne performance sera gardée dans l'historique.",
     function() {
       var pairIdx = app.relayPhase.currentPairIdx;
       app.relayPhase.pairs[pairIdx].kept = false;
@@ -2023,7 +2011,7 @@ document.addEventListener('touchmove', e => { if (e.target.closest('.btn')) e.pr
   var manifest = {
     name: 'Zones Relais',
     short_name: 'ZonesRelais',
-    description: 'Chronométrage et analyse de la zone de transmission — N'EPS Académie de Nantes',
+    description: "Chronométrage et analyse de la zone de transmission — N'EPS Académie de Nantes",
     start_url: '.',
     display: 'standalone',
     background_color: '#0a0a1a',
