@@ -423,13 +423,14 @@ html, body {
         👨‍🏫 Mode Enseignant
       </button>
       <button class="btn btn-ghost" onclick="loadSavedGroup()" id="btn-resume" style="display:none">
-        🔄 Reprendre la session
+        🔄 Reprendre la session en cours
+      </button>
+      <button class="btn btn-ghost" onclick="loadAndShowResults()" id="btn-see-results" style="display:none">
+        📊 Voir les résultats sauvegardés
       </button>
     </div>
 
-    <div style="margin:20px 16px 0; text-align:center;">
-      <p style="color:var(--muted); font-size:.8rem;">EPS · Lycée · Cycle Relais</p>
-    </div>
+
   </div>
 </div>
 
@@ -471,6 +472,7 @@ html, body {
       <select id="cfg-group-size" onchange="updateNameFields()">
         <option value="3">3 élèves</option>
         <option value="4" selected>4 élèves</option>
+        <option value="5">5 élèves</option>
       </select>
     </div>
   </div>
@@ -524,9 +526,9 @@ html, body {
         <div class="result-label">Vitesse (m/s)</div>
       </div>
     </div>
-    <div style="margin-top:12px; display:flex; gap:10px; flex-direction:column;">
-      <button class="btn btn-ghost btn-sm" onclick="retryCurrentSprint()">🔁 Recommencer ce passage</button>
-      <button class="btn btn-primary" id="btn-sprint-next" onclick="nextSprint()">➡️ Suivant</button>
+    <div style="margin-top:12px; display:flex; gap:10px; flex-direction:column;" id="sprint-result-choice">
+      <button class="btn btn-success" onclick="keepSprintResult()">✅ Conserver & passer au suivant</button>
+      <button class="btn btn-ghost btn-sm" onclick="retryCurrentSprint()">🔁 Recommencer</button>
     </div>
   </div>
 
@@ -559,7 +561,7 @@ html, body {
     <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px;">Chaque binôme doit réaliser son passage. Appuyez sur un passage pour le chronométrer. Le temps affiché depuis le dernier passage vous aide à gérer la récupération.</p>
     <div id="relay-hub-list"></div>
     <div style="margin-top:16px;">
-      <button class="btn btn-success" id="btn-hub-finish" onclick="goToFinalResults()" style="display:none;">🏆 Voir les résultats finaux</button>
+      <button class="btn btn-success" id="btn-hub-finish" onclick="goToFinalResults()">📊 Voir les résultats</button>
     </div>
   </div>
 
@@ -632,9 +634,16 @@ html, body {
       </div>
     </div>
     <div id="rr-analysis" style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;"></div>
-    <div style="display:flex; flex-direction:column; gap:10px;">
+    <div id="relay-result-choice" style="display:flex; flex-direction:column; gap:10px;">
+      <button class="btn btn-success" onclick="keepRelayResult()">✅ Conserver cette performance</button>
+      <button class="btn btn-warn btn-sm" onclick="retryLaterRelay()">⏳ Refaire plus tard</button>
       <button class="btn btn-ghost btn-sm" onclick="retryCurrentRelay()">🔁 Refaire immédiatement</button>
-      <button class="btn btn-primary" onclick="backToRelayHub()">↩ Retour au tableau des passages</button>
+    </div>
+    <div id="relay-result-kept" style="display:none; text-align:center; padding:10px;">
+      <span class="tag tag-green" style="font-size:.9rem;">✅ Performance conservée</span>
+      <div style="margin-top:10px;">
+        <button class="btn btn-ghost btn-sm" onclick="askReopen()">🔓 Refaire quand même…</button>
+      </div>
     </div>
   </div>
 
@@ -967,6 +976,7 @@ function sprintAction() {
     renderSprintHistory();
     checkSprintNavUnlock();
     saveSession();
+    // Auto-save on every result
   }
 }
 
@@ -1003,20 +1013,25 @@ function nextSprint() {
 }
 
 function renderSprintHistory() {
-  var idx = app.sprintPhase.currentIdx;
+  var idx     = app.sprintPhase.currentIdx;
   var sprints = app.players[idx].sprints;
-  var html = '';
-  if (sprints.length === 0) { html = '<p style="color:var(--muted);font-size:.85rem;">Aucun passage enregistré</p>'; }
-  sprints.forEach((s, i) => {
-    var speed = (app.cfg.sprintDist / s.time).toFixed(2);
-    var isBest = app.players[idx].bestSprint && s.time === app.players[idx].bestSprint.time;
-    html += `<div class="player-row">
-      <div style="font-family:var(--font-head);font-size:1.1rem;color:var(--muted);">#${i+1}</div>
-      <div class="player-info">
-        <div class="player-name">${s.time.toFixed(3)} s <span style="color:var(--muted);font-size:.85rem;">— ${speed} m/s</span></div>
-      </div>
-      ${isBest ? '<span class="tag tag-green">Meilleur</span>' : ''}
-    </div>`;
+  var html    = '';
+  if (sprints.length === 0) {
+    document.getElementById('sprint-history-list').innerHTML =
+      '<p style="color:var(--muted);font-size:.85rem;">Aucun passage enregistré</p>';
+    return;
+  }
+  var bestTime = Math.min.apply(null, sprints.map(function(s){ return s.time; }));
+  sprints.forEach(function(s, i) {
+    var speed  = (app.cfg.sprintDist / s.time).toFixed(2);
+    var isBest = s.time === bestTime;
+    html += '<div class="player-row" style="' + (isBest ? '' : 'opacity:.65;') + '">'
+      + '<div style="font-family:var(--font-head);font-size:1.1rem;color:var(--muted);">#' + (i+1) + '</div>'
+      + '<div class="player-info">'
+      + '<div class="player-name">' + s.time.toFixed(3) + ' s <span style="color:var(--muted);font-size:.85rem;">— ' + speed + ' m/s</span></div>'
+      + '</div>'
+      + (isBest && sprints.length > 1 ? '<span class="tag tag-green">⭐ Meilleur</span>' : '')
+      + '</div>';
   });
   document.getElementById('sprint-history-list').innerHTML = html;
 }
@@ -1062,11 +1077,18 @@ function renderRelayHub() {
 
     // Status badge
     var statusBadge = '';
+    var isKept = pair.kept;
+    var wantsRetry = pair.wantsRetry;
     if (!hasDone) {
       statusBadge = '<span class="tag tag-cyan" style="font-size:.7rem;">À faire</span>';
+    } else if (isKept) {
+      var better = best.betterThanCumul;
+      statusBadge = '<span class="tag tag-green" style="font-size:.7rem;">🔒 ' + best.totalTime.toFixed(3) + 's ' + (better ? '✅' : '⚠️') + '</span>';
+    } else if (wantsRetry) {
+      statusBadge = '<span class="tag tag-red" style="font-size:.7rem;">⏳ À refaire</span>';
     } else {
       var better = best.betterThanCumul;
-      statusBadge = `<span class="tag ${better ? 'tag-green' : 'tag-red'}" style="font-size:.7rem;">${best.totalTime.toFixed(3)}s ${better ? '✅' : '⚠️'}</span>`;
+      statusBadge = '<span class="tag ' + (better ? 'tag-green' : 'tag-red') + '" style="font-size:.7rem;">' + best.totalTime.toFixed(3) + 's ' + (better ? '✅' : '⚠️') + '</span>';
     }
 
     // Best info
@@ -1083,7 +1105,7 @@ function renderRelayHub() {
     var isSelected = isCurrent;
     var borderColor = !hasDone ? 'var(--accent1)' : best.betterThanCumul ? 'var(--accent4)' : 'var(--accent3)';
 
-    html += `<div onclick="selectRelayPair(${i})" style="
+    html += `<div onclick="selectOrWarnPair(${i})" style="
         background:${isSelected ? 'rgba(0,229,255,.08)' : 'var(--surface)'};
         border:1px solid ${isSelected ? 'var(--accent1)' : 'var(--border)'};
         border-left:4px solid ${borderColor};
@@ -1103,16 +1125,33 @@ function renderRelayHub() {
           ${bestHtml}
           ${recupHtml ? '<div style="margin-top:4px;">' + recupHtml + '</div>' : ''}
         </div>
-        <div style="font-size:1.6rem;flex-shrink:0;margin-top:-2px;">${!hasDone ? '▶' : '🔁'}</div>
+        <div style="font-size:1.6rem;flex-shrink:0;margin-top:-2px;">${!hasDone ? '▶' : (isKept ? '🔒' : (wantsRetry ? '⏳' : '🔁'))}</div>
       </div>
     </div>`;
   });
 
   document.getElementById('relay-hub-list').innerHTML = html;
-  document.getElementById('btn-hub-finish').style.display = allDone ? '' : 'none';
+  // btn-hub-finish is always visible
 
   // Show/update roles card for selected pair
   renderHubRolesCard();
+}
+
+function selectOrWarnPair(idx) {
+  var pair = app.relayPhase.pairs[idx];
+  if (pair.kept) {
+    // Pair is locked — ask before allowing re-selection
+    openConfirm(
+      'Performance conservée 🔒',
+      'Ce passage a été conservé. Voulez-vous quand même le resélectionner pour le refaire ?',
+      function() {
+        pair.kept = false;
+        selectRelayPair(idx);
+      }
+    );
+  } else {
+    selectRelayPair(idx);
+  }
 }
 
 function selectRelayPair(idx) {
@@ -1231,8 +1270,13 @@ function resetRelayUI() {
   document.getElementById('btn-relay-action').className = 'btn btn-success';
   document.getElementById('relay-result-card').style.display = 'none';
   document.getElementById('relay-chrono-card').style.display = '';
+  // Reset result choice UI
+  var choice = document.getElementById('relay-result-choice');
+  var kept   = document.getElementById('relay-result-kept');
+  if (choice) choice.style.display = '';
+  if (kept)   kept.style.display   = 'none';
 
-  [0,1,2,3].forEach(i => {
+  [0,1,2,3].forEach(function(i) {
     document.getElementById('zdot-' + i).className = 'zone-dot';
   });
 }
@@ -1375,26 +1419,27 @@ function retryCurrentRelay() {
 }
 
 function renderRelayHistory() {
-  var pairIdx = app.relayPhase.currentPairIdx;
+  var pairIdx  = app.relayPhase.currentPairIdx;
   var attempts = app.relayPhase.pairs[pairIdx].attempts;
-  var card = document.getElementById('relay-history-card');
-  var list = document.getElementById('relay-history-list');
+  var card     = document.getElementById('relay-history-card');
+  var list     = document.getElementById('relay-history-list');
   if (attempts.length === 0) { card.style.display = 'none'; return; }
   card.style.display = '';
+  var bestTime = Math.min.apply(null, attempts.map(function(a){ return a.totalTime; }));
   var html = '';
-  attempts.forEach((r, i) => {
-    var isBest = attempts.every(a => a === r || r.totalTime <= a.totalTime);
-    html += `<div class="history-item">
-      <div class="history-header">
-        <span class="history-num">Essai #${i+1}</span>
-        <span class="tag ${r.betterThanCumul?'tag-green':'tag-red'}">${r.totalTime.toFixed(3)}s ${isBest && attempts.length > 1 ? '⭐' : ''}</span>
-      </div>
-      <div style="display:flex;gap:10px;font-size:.8rem;color:var(--muted);flex-wrap:wrap;">
-        <span>Zone: <b style="color:var(--text)">${r.zoneTime.toFixed(3)}s</b></span>
-        <span>Vit.relais: <b style="color:var(--text)">${r.relaySpeed.toFixed(2)}m/s</b></span>
-        <span>Vit.zone: <b style="color:var(--text)">${r.zoneSpeed.toFixed(2)}m/s</b></span>
-      </div>
-    </div>`;
+  attempts.forEach(function(r, i) {
+    var isBest = r.totalTime === bestTime;
+    html += '<div class="history-item" style="' + (isBest ? 'border-left:3px solid var(--accent4);' : 'opacity:.7;') + '">'
+      + '<div class="history-header">'
+      + '<span class="history-num">Essai #' + (i+1) + (isBest && attempts.length > 1 ? ' ⭐' : '') + '</span>'
+      + '<span class="tag ' + (r.betterThanCumul ? 'tag-green' : 'tag-red') + '">' + r.totalTime.toFixed(3) + 's</span>'
+      + '</div>'
+      + '<div style="display:flex;gap:10px;font-size:.8rem;color:var(--muted);flex-wrap:wrap;">'
+      + '<span>Zone: <b style="color:var(--text)">' + r.zoneTime.toFixed(3) + 's</b></span>'
+      + '<span>Vit.relais: <b style="color:var(--text)">' + r.relaySpeed.toFixed(2) + 'm/s</b></span>'
+      + '<span>Vit.zone: <b style="color:var(--text)">' + r.zoneSpeed.toFixed(2) + 'm/s</b></span>'
+      + '</div>'
+      + '</div>';
   });
   list.innerHTML = html;
 }
@@ -1786,27 +1831,9 @@ function vibrate(pattern) {
   if (navigator.vibrate) navigator.vibrate(pattern);
 }
 
-function saveSession() {
-  localStorage.setItem('zr_session', JSON.stringify({ app: { cfg: app.cfg, players: app.players, relayPhase: app.relayPhase } }));
-}
+// saveSession is defined above
 
-function loadSavedGroup() {
-  var saved = localStorage.getItem('zr_session');
-  if (!saved) return;
-  try {
-    var s = JSON.parse(saved);
-    app.cfg = s.app.cfg;
-    app.players = s.app.players;
-    app.relayPhase = s.app.relayPhase;
-    // Determine where we are
-    var allSprints = app.players.every(p => p.bestSprint !== null);
-    if (allSprints) {
-      startRelayPhase();
-    } else {
-      startSprintPhase();
-    }
-  } catch(e) { alert('Erreur lors du chargement de la session.'); }
-}
+// loadSavedGroup is defined above
 
 /* ============================================================
    INIT
@@ -1815,10 +1842,139 @@ window.addEventListener('load', () => {
   // Check for saved session
   if (localStorage.getItem('zr_session')) {
     document.getElementById('btn-resume').style.display = '';
+    document.getElementById('btn-see-results').style.display = '';
   }
   updateNameFields();
 });
 
+
+/* ============================================================
+   PERSISTENCE — auto-save toutes les actions, restore si crash
+   ============================================================ */
+function saveSession() {
+  try {
+    // Deep-serialize only what's needed (avoid circular refs from intervals)
+    var snapshot = {
+      cfg:    app.cfg,
+      players: app.players.map(function(p) {
+        return { name:p.name, color:p.color, sprints:p.sprints, bestSprint:p.bestSprint };
+      }),
+      relayPhase: {
+        pairs: app.relayPhase.pairs.map(function(pair) {
+          return {
+            runner1Idx: pair.runner1Idx,
+            runner2Idx: pair.runner2Idx,
+            attempts:   pair.attempts,
+            lastRunAt:  pair.lastRunAt,
+            wantsRetry: pair.wantsRetry,
+            kept:       pair.kept   // NEW: locked flag
+          };
+        }),
+        currentPairIdx: app.relayPhase.currentPairIdx,
+        history: app.relayPhase.history
+      },
+      savedAt: Date.now()
+    };
+    localStorage.setItem('zr_session', JSON.stringify(snapshot));
+  } catch(e) { console.warn('saveSession failed:', e); }
+}
+
+function restoreSession(s) {
+  app.cfg         = s.cfg;
+  app.players     = s.players.map(function(p) {
+    return { name:p.name, color:p.color || '#7eb8d4', sprints:p.sprints||[], bestSprint:p.bestSprint||null };
+  });
+  // Rebuild relayPhase
+  generateRelayPairs();  // reset pairs structure
+  var saved = s.relayPhase || {};
+  var savedPairs = saved.pairs || [];
+  savedPairs.forEach(function(sp, i) {
+    if (app.relayPhase.pairs[i]) {
+      app.relayPhase.pairs[i].attempts   = sp.attempts   || [];
+      app.relayPhase.pairs[i].lastRunAt  = sp.lastRunAt  || null;
+      app.relayPhase.pairs[i].wantsRetry = sp.wantsRetry || false;
+      app.relayPhase.pairs[i].kept       = sp.kept       || false;
+    }
+  });
+  app.relayPhase.currentPairIdx = saved.currentPairIdx || 0;
+  app.relayPhase.history        = saved.history        || [];
+}
+
+/* ============================================================
+   SPRINT — CONSERVER / REFAIRE
+   ============================================================ */
+function keepSprintResult() {
+  // Best is already stored; just move to next
+  nextSprint();
+}
+
+/* ============================================================
+   RELAY — CONSERVER / REFAIRE PLUS TARD / REFAIRE IMMÉDIATEMENT
+   ============================================================ */
+function keepRelayResult() {
+  var pairIdx = app.relayPhase.currentPairIdx;
+  app.relayPhase.pairs[pairIdx].kept = true;
+  // Hide choice, show "conservée" badge
+  document.getElementById('relay-result-choice').style.display = 'none';
+  document.getElementById('relay-result-kept').style.display  = '';
+  saveSession();
+  // Auto-go back to hub after 1.2s
+  setTimeout(function() { backToRelayHub(); }, 1200);
+}
+
+function retryLaterRelay() {
+  var pairIdx = app.relayPhase.currentPairIdx;
+  app.relayPhase.pairs[pairIdx].wantsRetry = true;
+  app.relayPhase.pairs[pairIdx].kept = false;
+  saveSession();
+  backToRelayHub();
+}
+
+function askReopen() {
+  openConfirm(
+    'Refaire ce passage ?',
+    'Vous avez conservé cette performance. Voulez-vous quand même la refaire ? L'ancienne performance sera gardée dans l'historique.',
+    function() {
+      var pairIdx = app.relayPhase.currentPairIdx;
+      app.relayPhase.pairs[pairIdx].kept = false;
+      document.getElementById('relay-result-choice').style.display = '';
+      document.getElementById('relay-result-kept').style.display   = 'none';
+      retryCurrentRelay();
+    }
+  );
+}
+
+/* ============================================================
+   RESULTS — load and show even if partial
+   ============================================================ */
+function loadAndShowResults() {
+  var saved = localStorage.getItem('zr_session');
+  if (!saved) { alert('Aucune session sauvegardée.'); return; }
+  try {
+    var s = JSON.parse(saved);
+    restoreSession(s);
+    showPage('results');
+    renderResults();
+  } catch(e) { alert('Erreur de lecture : ' + e.message); }
+}
+
+/* ============================================================
+   OVERRIDE loadSavedGroup to use restoreSession
+   ============================================================ */
+function loadSavedGroup() {
+  var saved = localStorage.getItem('zr_session');
+  if (!saved) return;
+  try {
+    var s = JSON.parse(saved);
+    restoreSession(s);
+    var allSprints = app.players.every(function(p) { return p.bestSprint !== null; });
+    if (allSprints) {
+      startRelayPhase();
+    } else {
+      startSprintPhase();
+    }
+  } catch(e) { alert('Erreur lors du chargement : ' + e.message); }
+}
 
 /* ============================================================
    RIPPLE EFFECT — applies to all .btn and .stepper-btn
