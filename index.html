@@ -422,12 +422,15 @@ html, body {
       <button class="btn btn-teacher" onclick="goToTeacher()">
         👨‍🏫 Mode Enseignant
       </button>
-      <button class="btn btn-ghost" onclick="loadSavedGroup()" id="btn-resume" style="display:none">
+      <button class="btn btn-ghost" onclick="loadSavedGroup()" id="btn-resume" style="opacity:.35;pointer-events:none;" disabled>
         🔄 Reprendre la session en cours
       </button>
-      <button class="btn btn-ghost" onclick="loadAndShowResults()" id="btn-see-results" style="display:none">
+      <button class="btn btn-ghost" onclick="loadAndShowResults()" id="btn-see-results" style="opacity:.35;pointer-events:none;" disabled>
         📊 Voir les résultats sauvegardés
       </button>
+      <p id="no-session-hint" style="text-align:center;font-size:.75rem;color:var(--muted);margin-top:4px;opacity:.6;">
+        Aucune session sauvegardée
+      </p>
     </div>
 
 
@@ -880,6 +883,19 @@ function updateNameFields() {
         <input type="text" id="player-name-${i}" value="${existing || ''}" placeholder="Prénom ${i+1}">
       </div>`;
   }
+}
+
+function refreshHomeButtons() {
+  var has = !!localStorage.getItem('zr_session');
+  var btnR = document.getElementById('btn-resume');
+  var btnS = document.getElementById('btn-see-results');
+  if (!btnR || !btnS) return;
+  btnR.style.opacity = has ? '1' : '.35';
+  btnS.style.opacity = has ? '1' : '.35';
+  btnR.style.pointerEvents = has ? 'auto' : 'none';
+  btnS.style.pointerEvents = has ? 'auto' : 'none';
+  if (has) { btnR.removeAttribute('disabled'); btnS.removeAttribute('disabled'); }
+  else { btnR.setAttribute('disabled',''); btnS.setAttribute('disabled',''); }
 }
 
 function startSession() {
@@ -1860,8 +1876,16 @@ function vibrate(pattern) {
 window.addEventListener('load', () => {
   // Check for saved session
   if (localStorage.getItem('zr_session')) {
-    document.getElementById('btn-resume').style.display = '';
-    document.getElementById('btn-see-results').style.display = '';
+    var btnR = document.getElementById('btn-resume');
+    var btnS = document.getElementById('btn-see-results');
+    btnR.style.opacity = '1';
+    btnR.style.pointerEvents = 'auto';
+    btnR.removeAttribute('disabled');
+    btnS.style.opacity = '1';
+    btnS.style.pointerEvents = 'auto';
+    btnS.removeAttribute('disabled');
+    var hint = document.getElementById('no-session-hint');
+    if (hint) hint.style.display = 'none';
   }
   updateNameFields();
   // Save on page hide / unload (covers browser close, tab switch)
@@ -1900,6 +1924,7 @@ function saveSession() {
       savedAt: Date.now()
     };
     localStorage.setItem('zr_session', JSON.stringify(snapshot));
+    refreshHomeButtons();
   } catch(e) { console.warn('saveSession failed:', e); }
 }
 
