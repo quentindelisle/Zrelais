@@ -1083,6 +1083,44 @@ function scanFromText() {
   else alert('Format non reconnu. Le contenu doit commencer par ZRS/ ou ZRR/');
 }
 
+/* ── QR TAB SWITCHER ── */
+var _activeQRType = 'sprint';
+
+function showQRTab(type) {
+  _activeQRType = type;
+  var canvas = document.getElementById('qr-canvas-' + type);
+  var img    = document.getElementById('qr-display-img');
+  var info   = document.getElementById('qr-active-info');
+  if (!canvas || !img) return;
+  img.src = canvas.toDataURL('image/png');
+  if (info) info.textContent = (canvas._payload || '').length + ' car. · version QR ' + (canvas._ver || '?');
+  // Tab highlight
+  var tabS = document.getElementById('qr-tab-sprint');
+  var tabR = document.getElementById('qr-tab-relay');
+  if (tabS) {
+    tabS.style.background    = type === 'sprint' ? 'var(--accent1)' : 'transparent';
+    tabS.style.color         = type === 'sprint' ? '#000' : 'var(--muted)';
+    tabS.style.borderColor   = type === 'sprint' ? 'var(--accent1)' : 'var(--border)';
+  }
+  if (tabR) {
+    tabR.style.background    = type === 'relay'  ? 'var(--accent3)' : 'transparent';
+    tabR.style.color         = type === 'relay'  ? '#000' : 'var(--muted)';
+    tabR.style.borderColor   = type === 'relay'  ? 'var(--accent3)' : 'var(--border)';
+  }
+}
+
+function downloadActiveQR() {
+  var canvas = document.getElementById('qr-canvas-' + _activeQRType);
+  if (!canvas) return;
+  var names = app.players.map(function(p){ return p.name; }).join('-');
+  var a = document.createElement('a');
+  a.download = 'ZR-' + (_activeQRType === 'relay' ? 'Relais' : 'Sprint') + '-' + names + '.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+
+function downloadQR(type) { _activeQRType = type; downloadActiveQR(); }
+
 /* ── TEACHER ── */
 function renderTeacherData() {
   document.getElementById('teacher-count').textContent=teacherData.length;
