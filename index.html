@@ -26,10 +26,33 @@
   --radius:  14px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html{background:#111318;}body{height:100%;background:var(--bg);color:var(--text);font-family:'Exo 2','Segoe UI',sans-serif;font-size:16px;overflow:hidden;}
-/* PC wrapper */
-#app-root{max-width:520px;margin:0 auto;position:relative;height:100%;background:var(--bg);box-shadow:0 0 40px rgba(0,0,0,.5);}
-.page{position:absolute;inset:0;display:none;flex-direction:column;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 80px;animation:fadeIn .2s ease;}
+/* ── LAYOUT: full viewport, centered column on PC ── */
+html,body{
+  height:100%; width:100%;
+  margin:0; padding:0;
+  background:#111318;
+  overflow:hidden;
+}
+#app-root{
+  position:fixed;
+  top:0; bottom:0;
+  left:50%; transform:translateX(-50%);
+  width:100%; max-width:520px;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Exo 2','Segoe UI',sans-serif;
+  font-size:16px;
+  box-shadow:0 0 60px rgba(0,0,0,.6);
+  overflow:hidden;
+}
+.page{
+  position:absolute; inset:0;
+  display:none; flex-direction:column;
+  overflow-y:auto; overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  padding:0 0 72px;
+  animation:fadeIn .2s ease;
+}
 .page.active{display:flex;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 @keyframes ripple{0%{transform:scale(0);opacity:.5;}100%{transform:scale(4);opacity:0;}}
