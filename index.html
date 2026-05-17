@@ -1190,7 +1190,7 @@ var scanAnimFrame = null;
 
 function startQRScan() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    alert('Caméra non disponible. Utilisez "Ouvrir une image" à la place.');
+    alert('Caméra non disponible. Utilisez "Coller le texte" à la place.');
     return;
   }
   navigator.mediaDevices.getUserMedia({
@@ -1206,11 +1206,44 @@ function startQRScan() {
     if (wrap) wrap.style.display = 'block';
     if (area) area.style.display = 'none';
     document.getElementById('btn-start-scan').style.display = 'none';
-    document.getElementById('btn-stop-scan').style.display = '';
+    document.getElementById('btn-stop-scan').style.display  = '';
     scanActive = true;
-    scanAnimFrame = requestAnimationFrame(scanQRFrame);
+
+    // Use BarcodeDetector (native, works on Chrome Android/Desktop)
+    // Falls back to jsQR if not available
+    if ('BarcodeDetector' in window) {
+      var detector = new BarcodeDetector({ formats: ['qr_code'] });
+      scanWithDetector(video, detector);
+    } else {
+      scanAnimFrame = requestAnimationFrame(function loop() {
+        if (scanActive) { scanQRFrame(); scanAnimFrame = requestAnimationFrame(loop); }
+      });
+    }
   }).catch(function(err) {
-    alert('Caméra inaccessible : ' + err.message + '\nConseils : HTTPS ou localhost requis. Sinon utilisez Ouvrir une image.');
+    alert('Caméra inaccessible : ' + err.message);
+  });
+}
+
+function scanWithDetector(video, detector) {
+  if (!scanActive) return;
+  detector.detect(video).then(function(codes) {
+    if (!scanActive) return;
+    if (codes && codes.length > 0) {
+      var val = codes[0].rawValue;
+      var status = document.getElementById('scan-live-status');
+      if (status) status.textContent = '📡 QR lu : ' + val.substring(0, 20) + '…';
+      if (val.startsWith('ZRS/') || val.startsWith('ZRR/')) {
+        if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+        stopQRScan();
+        processScannedQR(val);
+        return;
+      }
+    }
+    // Continue scanning
+    setTimeout(function() { scanWithDetector(video, detector); }, 200);
+  }).catch(function() {
+    // Error (e.g. video not ready) — retry
+    setTimeout(function() { scanWithDetector(video, detector); }, 300);
   });
 }
 
@@ -1224,43 +1257,36 @@ function stopQRScan() {
   if (video) video.srcObject = null;
   if (wrap)  wrap.style.display  = 'none';
   if (area)  area.style.display  = '';
-  document.getElementById('btn-start-scan').style.display = '';
-  document.getElementById('btn-stop-scan').style.display  = 'none';
+  var s = document.getElementById('btn-start-scan');
+  var e = document.getElementById('btn-stop-scan');
+  if (s) s.style.display = '';
+  if (e) e.style.display = 'none';
 }
 
 function scanQRFrame() {
-  if (!scanActive) return;
+  // jsQR fallback for non-Chrome browsers
   var video  = document.getElementById('qr-video');
   var canvas = document.getElementById('qr-decode-canvas');
   var status = document.getElementById('scan-live-status');
-  if (!video || !canvas) return;
-
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    var ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-    var code = null;
-    var modes = ['dontInvert', 'onlyInvert', 'attemptBoth'];
-    for (var mi = 0; mi < modes.length && !code; mi++) {
-      code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: modes[mi] });
-    }
-
-    if (code && code.data && (code.data.startsWith('ZRS/') || code.data.startsWith('ZRR/'))) {
-      if (status) status.textContent = '✅ QR détecté !';
-      if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
-      stopQRScan();
-      processScannedQR(code.data);
-      return;
-    }
-    if (status) {
-      status.textContent = code && code.data ? ('⚠️ QR non reconnu: ' + code.data.substring(0,20)) : '🔍 Recherche…';
-    }
+  if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  var imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  var code = null;
+  var modes = ['dontInvert', 'onlyInvert', 'attemptBoth'];
+  for (var mi = 0; mi < modes.length && !code; mi++) {
+    code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: modes[mi] });
   }
-  scanAnimFrame = requestAnimationFrame(scanQRFrame);
+  if (status) status.textContent = code ? ('📡 ' + code.data.substring(0,20)) : '🔍 Recherche…';
+  if (code && code.data && (code.data.startsWith('ZRS/') || code.data.startsWith('ZRR/'))) {
+    if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+    stopQRScan();
+    processScannedQR(code.data);
+  }
 }
+
 
 /* ── SPRINT HUB ── */
 function startSprintPhase() {
