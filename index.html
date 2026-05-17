@@ -344,31 +344,46 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Exo 2'
 
 <!-- MODAL QR -->
 <div class="modal-overlay" id="modal-qr">
-  <div class="modal-box" style="max-width:480px;">
-    <div class="modal-title">📱 QR CODES GROUPE</div>
-    <p style="text-align:center;color:var(--muted);font-size:.82rem;margin-bottom:10px;" id="qr-group-label"></p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-      <div style="text-align:center;">
-        <div style="font-family:'Bebas Neue','Arial Black',sans-serif;font-size:.9rem;color:var(--accent1);margin-bottom:6px;">🏃 SPRINT</div>
-        <div style="background:#fff;border-radius:10px;padding:8px;">
-          <canvas id="qr-canvas-sprint" style="width:100%;height:auto;image-rendering:pixelated;display:block;"></canvas>
-        </div>
-        <p style="font-size:.65rem;color:var(--muted);margin-top:4px;" id="qr-sprint-info"></p>
-        <button class="btn btn-primary btn-sm" style="margin-top:6px;padding:8px;" onclick="downloadQR('sprint')">💾 Télécharger</button>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-family:'Bebas Neue','Arial Black',sans-serif;font-size:.9rem;color:var(--accent3);margin-bottom:6px;">🔄 RELAIS</div>
-        <div style="background:#fff;border-radius:10px;padding:8px;">
-          <canvas id="qr-canvas-relay" style="width:100%;height:auto;image-rendering:pixelated;display:block;"></canvas>
-        </div>
-        <p style="font-size:.65rem;color:var(--muted);margin-top:4px;" id="qr-relay-info"></p>
-        <button class="btn btn-warn btn-sm" style="margin-top:6px;padding:8px;" onclick="downloadQR('relay')">💾 Télécharger</button>
-      </div>
+  <div class="modal-box" style="max-width:400px;padding:16px;">
+    <div class="modal-title" style="margin-bottom:8px;">📱 QR CODES GROUPE</div>
+    <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-bottom:10px;" id="qr-group-label"></p>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button id="qr-tab-sprint" onclick="showQRTab('sprint')"
+        style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--accent1);
+               background:var(--accent1);color:#000;font-family:'Bebas Neue','Arial Black',sans-serif;
+               font-size:1rem;cursor:pointer;letter-spacing:1px;">🏃 SPRINT</button>
+      <button id="qr-tab-relay" onclick="showQRTab('relay')"
+        style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--border);
+               background:transparent;color:var(--muted);font-family:'Bebas Neue','Arial Black',sans-serif;
+               font-size:1rem;cursor:pointer;letter-spacing:1px;">🔄 RELAIS</button>
     </div>
-    <p style="text-align:center;font-size:.72rem;color:var(--accent3);margin-bottom:10px;">Scannez ou téléchargez chaque QR séparément depuis le mode enseignant</p>
-    <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-qr')">✕ Fermer</button>
+
+    <!-- QR Display — full width, no border-radius, white bg -->
+    <div style="background:#ffffff;padding:0;margin:0 -4px;text-align:center;">
+      <img id="qr-display-img"
+           style="display:block;width:100%;max-width:340px;height:auto;
+                  image-rendering:pixelated;image-rendering:crisp-edges;
+                  margin:0 auto;"
+           alt="QR Code">
+    </div>
+
+    <!-- Info + actions -->
+    <p style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:6px;" id="qr-active-info"></p>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-primary btn-sm" id="btn-qr-download" onclick="downloadActiveQR()">💾 Télécharger cette image</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-qr')">✕ Fermer</button>
+    </div>
+    <p style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:8px;">
+      Scannez chaque QR séparément depuis le mode enseignant
+    </p>
   </div>
 </div>
+
+<!-- Hidden canvases for generation (off-screen) -->
+<canvas id="qr-canvas-sprint" style="display:none;"></canvas>
+<canvas id="qr-canvas-relay"  style="display:none;"></canvas>
 
 <!-- MODAL CONFIRM -->
 <div class="modal-overlay" id="modal-confirm">
