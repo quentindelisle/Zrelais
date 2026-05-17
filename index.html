@@ -26,13 +26,15 @@
   --radius:  14px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Exo 2','Segoe UI',sans-serif;font-size:16px;overflow:hidden;}
-.page{position:fixed;inset:0;display:none;flex-direction:column;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 80px;animation:fadeIn .2s ease;}
+html{background:#111318;}body{height:100%;background:var(--bg);color:var(--text);font-family:'Exo 2','Segoe UI',sans-serif;font-size:16px;overflow:hidden;}
+/* PC wrapper */
+#app-root{max-width:520px;margin:0 auto;position:relative;height:100%;background:var(--bg);box-shadow:0 0 40px rgba(0,0,0,.5);}
+.page{position:absolute;inset:0;display:none;flex-direction:column;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 80px;animation:fadeIn .2s ease;}
 .page.active{display:flex;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 @keyframes ripple{0%{transform:scale(0);opacity:.5;}100%{transform:scale(4);opacity:0;}}
 
-.app-header{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 18px;display:flex;align-items:center;gap:12px;}
+.app-header{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 18px;display:flex;align-items:center;gap:12px;backdrop-filter:blur(8px);}
 .app-header h1{font-family:'Bebas Neue','Arial Black',sans-serif;font-size:1.9rem;letter-spacing:2px;background:linear-gradient(135deg,var(--accent1),var(--accent5));-webkit-background-clip:text;-webkit-text-fill-color:transparent;flex:1;}
 .back-btn{background:var(--surface);border:1px solid var(--border);color:var(--accent1);padding:8px 16px 8px 12px;border-radius:50px;font-size:1rem;font-weight:700;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;gap:6px;transition:background .15s,transform .15s;position:relative;overflow:hidden;white-space:nowrap;}
 .back-btn::before{content:"‹";font-size:1.4rem;line-height:1;margin-right:2px;display:inline-block;transition:transform .2s;}
@@ -111,11 +113,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Exo 2'
 .data-table th{background:var(--surface);color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;padding:10px 8px;text-align:left;}
 .data-table td{padding:10px 8px;border-bottom:1px solid var(--border);}
 
-.signature{position:fixed;bottom:68px;right:14px;font-size:.65rem;color:rgba(255,255,255,.2);letter-spacing:.3px;pointer-events:none;}
+.signature{position:absolute;bottom:72px;right:14px;font-size:.65rem;color:rgba(255,255,255,.15);letter-spacing:.3px;pointer-events:none;z-index:10;}
 </style>
 </head>
 <body>
 
+<div id="app-root">
 <!-- HOME -->
 <div class="page active" id="page-home">
   <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px;background:radial-gradient(ellipse at 50% 30%,rgba(56,189,248,.08) 0%,transparent 70%),radial-gradient(ellipse at 80% 80%,rgba(167,139,250,.07) 0%,transparent 60%);">
@@ -342,6 +345,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Exo 2'
   </div>
 </div>
 
+</div><!-- /app-root -->
+<!-- MODALS (outside app-root, centered separately) -->
 <!-- MODAL QR -->
 <div class="modal-overlay" id="modal-qr">
   <div class="modal-box" style="max-width:400px;padding:16px;">
@@ -959,10 +964,9 @@ function generateGroupQR() {
     var cr = document.getElementById('qr-canvas-relay');
     var v1 = window.drawQROnCanvas(sprintPayload, cs);
     var v2 = window.drawQROnCanvas(relayPayload,  cr);
-    document.getElementById('qr-sprint-info').textContent = sprintPayload.length+' car. · v'+v1;
-    document.getElementById('qr-relay-info').textContent  = relayPayload.length+' car. · v'+v2;
     document.getElementById('qr-group-label').textContent = app.players.map(function(p){return p.name;}).join(', ')+' — '+new Date().toLocaleDateString('fr-FR');
     openModal('modal-qr');
+    showQRTab('sprint');  // show sprint QR first
   } catch(e){ alert('Erreur QR: '+e.message); }
 }
 function downloadQR(type) {
