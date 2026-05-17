@@ -368,46 +368,50 @@ html,body{
   </div>
 </div>
 
-</div><!-- /app-root -->
-<!-- MODALS (outside app-root, centered separately) -->
-<!-- MODAL QR -->
-<div class="modal-overlay" id="modal-qr">
-  <div class="modal-box" style="max-width:400px;padding:16px;">
-    <div class="modal-title" style="margin-bottom:8px;">📱 QR CODES GROUPE</div>
-    <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-bottom:10px;" id="qr-group-label"></p>
+<!-- PAGE QR FULLSCREEN (dans app-root) -->
+<div class="page" id="page-qr">
+  <!-- Fond blanc total pour maximiser le contraste du QR -->
+  <div style="flex:1;background:#ffffff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;">
 
+    <!-- QR image plein écran -->
+    <img id="qr-display-img"
+         style="display:block;width:100%;height:auto;max-height:80vh;
+                object-fit:contain;
+                image-rendering:pixelated;image-rendering:crisp-edges;"
+         alt="QR Code">
+  </div>
+
+  <!-- Barre de contrôle en bas -->
+  <div style="background:#1a1d27;padding:12px 16px;display:flex;flex-direction:column;gap:8px;">
+    <p style="text-align:center;font-size:.8rem;color:#94a3b8;margin-bottom:2px;" id="qr-group-label"></p>
     <!-- Tabs -->
-    <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <div style="display:flex;gap:8px;">
       <button id="qr-tab-sprint" onclick="showQRTab('sprint')"
-        style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--accent1);
-               background:var(--accent1);color:#000;font-family:'Bebas Neue','Arial Black',sans-serif;
-               font-size:1rem;cursor:pointer;letter-spacing:1px;">🏃 SPRINT</button>
+        style="flex:1;padding:10px;border-radius:8px;border:2px solid #38bdf8;
+               background:#38bdf8;color:#000;
+               font-family:'Bebas Neue','Arial Black',sans-serif;
+               font-size:1rem;cursor:pointer;letter-spacing:1px;touch-action:manipulation;">🏃 SPRINT</button>
       <button id="qr-tab-relay" onclick="showQRTab('relay')"
-        style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--border);
-               background:transparent;color:var(--muted);font-family:'Bebas Neue','Arial Black',sans-serif;
-               font-size:1rem;cursor:pointer;letter-spacing:1px;">🔄 RELAIS</button>
+        style="flex:1;padding:10px;border-radius:8px;border:2px solid #363b55;
+               background:transparent;color:#94a3b8;
+               font-family:'Bebas Neue','Arial Black',sans-serif;
+               font-size:1rem;cursor:pointer;letter-spacing:1px;touch-action:manipulation;">🔄 RELAIS</button>
     </div>
-
-    <!-- QR Display — full width, no border-radius, white bg -->
-    <div style="background:#ffffff;padding:0;margin:0 -4px;text-align:center;">
-      <img id="qr-display-img"
-           style="display:block;width:100%;max-width:340px;height:auto;
-                  image-rendering:pixelated;image-rendering:crisp-edges;
-                  margin:0 auto;"
-           alt="QR Code">
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="copyQRText()">📋 Copier le texte</button>
+      <button class="btn btn-primary btn-sm" style="flex:1;" onclick="downloadActiveQR()">💾 Télécharger</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="showPage('results')">✕ Fermer</button>
     </div>
-
-    <!-- Info + actions -->
-    <p style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:6px;" id="qr-active-info"></p>
-    <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
-      <button class="btn btn-primary btn-sm" id="btn-qr-download" onclick="downloadActiveQR()">💾 Télécharger cette image</button>
-      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-qr')">✕ Fermer</button>
-    </div>
-    <p style="text-align:center;font-size:.7rem;color:var(--muted);margin-top:8px;">
-      Scannez chaque QR séparément depuis le mode enseignant
-    </p>
+    <p style="text-align:center;font-size:.68rem;color:#64748b;" id="qr-active-info"></p>
   </div>
 </div>
+
+<!-- Canvases cachés pour la génération -->
+<canvas id="qr-canvas-sprint" style="display:none;"></canvas>
+<canvas id="qr-canvas-relay"  style="display:none;"></canvas>
+</div><!-- /app-root -->
+<!-- MODALS (outside app-root, centered separately) -->
+
 
 <!-- Hidden canvases for generation (off-screen) -->
 <canvas id="qr-canvas-sprint" style="display:none;"></canvas>
@@ -988,7 +992,7 @@ function generateGroupQR() {
     var v1 = window.drawQROnCanvas(sprintPayload, cs);
     var v2 = window.drawQROnCanvas(relayPayload,  cr);
     document.getElementById('qr-group-label').textContent = app.players.map(function(p){return p.name;}).join(', ')+' — '+new Date().toLocaleDateString('fr-FR');
-    openModal('modal-qr');
+    showPage('qr');
     showQRTab('sprint');  // show sprint QR first
   } catch(e){ alert('Erreur QR: '+e.message); }
 }
@@ -1092,20 +1096,36 @@ function showQRTab(type) {
   var img    = document.getElementById('qr-display-img');
   var info   = document.getElementById('qr-active-info');
   if (!canvas || !img) return;
+  // Render to img for crisp display
   img.src = canvas.toDataURL('image/png');
-  if (info) info.textContent = (canvas._payload || '').length + ' car. · version QR ' + (canvas._ver || '?');
-  // Tab highlight
+  if (info) info.textContent = (canvas._payload||'').length + ' car. · v' + (canvas._ver||'?');
+  // Tabs
+  var isSprint = (type === 'sprint');
   var tabS = document.getElementById('qr-tab-sprint');
   var tabR = document.getElementById('qr-tab-relay');
   if (tabS) {
-    tabS.style.background    = type === 'sprint' ? 'var(--accent1)' : 'transparent';
-    tabS.style.color         = type === 'sprint' ? '#000' : 'var(--muted)';
-    tabS.style.borderColor   = type === 'sprint' ? 'var(--accent1)' : 'var(--border)';
+    tabS.style.background  = isSprint ? '#38bdf8' : 'transparent';
+    tabS.style.color       = isSprint ? '#000'    : '#94a3b8';
+    tabS.style.borderColor = isSprint ? '#38bdf8' : '#363b55';
   }
   if (tabR) {
-    tabR.style.background    = type === 'relay'  ? 'var(--accent3)' : 'transparent';
-    tabR.style.color         = type === 'relay'  ? '#000' : 'var(--muted)';
-    tabR.style.borderColor   = type === 'relay'  ? 'var(--accent3)' : 'var(--border)';
+    tabR.style.background  = !isSprint ? '#fbbf24' : 'transparent';
+    tabR.style.color       = !isSprint ? '#000'    : '#94a3b8';
+    tabR.style.borderColor = !isSprint ? '#fbbf24' : '#363b55';
+  }
+}
+
+function copyQRText() {
+  var canvas = document.getElementById('qr-canvas-' + _activeQRType);
+  var text   = canvas && canvas._payload ? canvas._payload : '';
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      alert('Texte copié ! Collez-le dans le mode Enseignant > champ texte.');
+    });
+  } else {
+    // Fallback: show in prompt so user can copy manually
+    prompt('Copiez ce texte et collez-le dans le mode Enseignant :', text);
   }
 }
 
