@@ -211,8 +211,8 @@ html,body{
     <p style="color:var(--muted);font-size:.85rem;" id="sprint-status-text">Prêt à chronométrer</p>
   </div>
   <div style="padding:0 16px;display:flex;flex-direction:column;gap:12px;">
-    <button class="btn btn-success" id="btn-sprint-start" onclick="sprintAction()">🟢 DÉPART</button>
-    <button class="btn btn-danger" id="btn-sprint-stop" onclick="sprintAction()" style="display:none;">🏁 ARRIVÉE</button>
+    <button class="btn btn-success" id="btn-sprint-start">🟢 DÉPART</button>
+    <button class="btn btn-danger" id="btn-sprint-stop" style="display:none;">🏁 ARRIVÉE</button>
   </div>
   <div class="card" id="sprint-result-block" style="display:none;">
     <div class="card-title">📊 Résultat</div>
@@ -272,7 +272,7 @@ html,body{
     </div>
     <p style="text-align:center;color:var(--muted);font-size:.85rem;margin-bottom:8px;" id="relay-step-label">Appuyez pour démarrer</p>
     <div class="chrono-big" id="relay-chrono">0.0</div>
-    <button class="btn btn-success" id="btn-relay-action" onclick="relayStep()">🟢 DÉPART</button>
+    <button class="btn btn-success" id="btn-relay-action">🟢 DÉPART</button>
   </div>
   <div class="card" id="relay-result-card" style="display:none;">
     <div class="card-title">📊 Analyse</div>
@@ -1532,6 +1532,29 @@ document.addEventListener('pointerdown',function(e){
   var rect=btn.getBoundingClientRect(); r.style.top=(e.clientY-rect.top)+'px'; r.style.left=(e.clientX-rect.left)+'px';
   btn.appendChild(r); r.addEventListener('animationend',function(){r.remove();});
 });
+
+/* ── APPUI INSTANTANÉ POUR LE CHRONO ──
+   Le "click" natif n'est déclenché qu'après le relâchement du doigt (touchend), ce qui
+   retarde l'action de toute la durée de l'appui et peut carrément passer à la trappe en cas
+   de micro-glissement du doigt (fréquent quand on chronomètre dans le feu de l'action).
+   On déclenche donc l'action dès le contact (pointerdown), sans attendre le relâchement,
+   avec un anti-rebond pour ignorer le "click" de compatibilité qui peut suivre. */
+function bindInstantTap(id, handler) {
+  var el=document.getElementById(id); if(!el) return;
+  var lastFire=0;
+  function fire(e){
+    var now=Date.now();
+    if(now-lastFire<350) return;
+    lastFire=now;
+    if(e.cancelable) e.preventDefault();
+    handler(e);
+  }
+  el.addEventListener('pointerdown', fire, {passive:false});
+  el.addEventListener('click', fire);
+}
+bindInstantTap('btn-sprint-start', sprintAction);
+bindInstantTap('btn-sprint-stop', sprintAction);
+bindInstantTap('btn-relay-action', relayStep);
 
 /* ── INIT ── */
 window.addEventListener('load',function(){
