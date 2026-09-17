@@ -171,9 +171,9 @@ html,body{
     <div class="input-group"><label>Zone de transmission (m)</label>
       <div class="stepper"><button class="stepper-btn" onclick="stepInput('cfg-zone-dist',-5,5,50)">−</button><input type="number" id="cfg-zone-dist" value="20" min="5" max="50"><button class="stepper-btn" onclick="stepInput('cfg-zone-dist',5,5,50)">+</button></div></div>
     <div class="input-group"><label>Taille du groupe</label>
-      <select id="cfg-group-size" onchange="updateNameFields()"><option value="3">3 élèves</option><option value="4" selected>4 élèves</option><option value="5">5 élèves</option></select></div>
+      <div class="stepper"><button class="stepper-btn" onclick="stepGroupSize(-1)">−</button><input type="number" id="cfg-group-size" value="15" min="3" max="30" oninput="updateNameFields()"><button class="stepper-btn" onclick="stepGroupSize(1)">+</button></div></div>
   </div>
-  <div class="card"><div class="card-title">👥 Prénoms</div><div id="name-fields"></div></div>
+  <div class="card"><div class="card-title">👥 Prénoms</div><p style="font-size:.78rem;color:var(--muted);margin:-6px 0 10px;">Pour 5 élèves ou plus, les passages relais seront formés automatiquement selon les temps de sprint (partenaires aux temps proches).</p><div id="name-fields"></div></div>
   <div style="padding:0 16px 20px;"><button class="btn btn-success" onclick="startSession()">✅ Démarrer la séance</button></div>
 </div>
 
@@ -223,7 +223,7 @@ html,body{
   <div class="app-header"><button class="back-btn" onclick="confirmBack()">Retour</button><h1>RELAIS</h1></div>
   <div class="card">
     <div class="card-title">📋 Passages à réaliser</div>
-    <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px;">Le 1er cité est toujours le démarreur. Appuyez sur un passage pour le sélectionner.</p>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px;">Le 1er cité est toujours le démarreur. Chaque élève passe 4 fois avec 4 partenaires différents (2 fois démarreur, 2 fois relayeur), appariés selon la proximité des temps de sprint. Appuyez sur un passage pour le sélectionner.</p>
     <div id="relay-hub-list"></div>
     <div style="margin-top:16px;"><button class="btn btn-success" id="btn-hub-finish" onclick="goToFinalResults()">📊 Voir les résultats</button></div>
   </div>
@@ -465,6 +465,11 @@ window.drawQROnCanvas = function(text,canvas){
    APP STATE
    ============================================================ */
 var COLORS = ['#38bdf8','#f472b6','#fbbf24','#34d399','#a78bfa','#ff8c00'];
+function colorForIndex(i,n) {
+  if (i < COLORS.length) return COLORS[i];
+  var hue = Math.round((360 * i / Math.max(n,1)) % 360);
+  return 'hsl(' + hue + ',72%,58%)';
+}
 var app = {
   cfg: { sprintDist:50, relayDist:100, zoneDist:20, groupSize:4 },
   players: [],
@@ -508,24 +513,50 @@ function startSession() {
   for(var i=0;i<app.cfg.groupSize;i++){
     var el = document.getElementById('pn-'+i);
     app.players.push({ name: el&&el.value.trim() ? el.value.trim() : 'Élève '+(i+1),
-                       color: COLORS[i], sprints:[], bestSprint:null });
+                       color: colorForIndex(i, app.cfg.groupSize), sprints:[], bestSprint:null });
   }
-  generateRelayPairs();
+  app.relayPhase.pairs = []; app.relayPhase.history = []; app.relayPhase.currentPairIdx = 0;
   app.sprintPhase.currentIdx = 0;
   startSprintPhase();
   saveSession();
 }
+/* Construit les passages de relais à partir des temps de sprint :
+   - élèves triés du plus rapide au plus lent
+   - chaque élève est apparié à ses 2 voisins immédiats de chaque côté dans ce classement
+     (partenaires aux temps les plus proches)
+   - chaque élève fait ainsi exactement 4 passages avec 4 partenaires différents :
+     2 fois démarreur (vers le voisin +1 et +2) et 2 fois relayeur (depuis le voisin -1 et -2)
+   Pour les groupes de moins de 5 élèves (impossible d'avoir 4 partenaires distincts),
+   on revient à un brassage complet (toutes les paires ordonnées). */
 function generateRelayPairs() {
-  app.relayPhase.pairs = []; app.relayPhase.history = [];
   var n = app.players.length;
-  for(var i=0;i<n;i++) for(var j=0;j<n;j++) if(i!==j)
-    app.relayPhase.pairs.push({ runner1Idx:i, runner2Idx:j,
-      attempts:[], lastRunAt:null, wantsRetry:false, kept:false });
+  var allHaveBest = app.players.every(function(p){ return !!p.bestSprint; });
+  app.relayPhase.pairs = []; app.relayPhase.history = []; app.relayPhase.currentPairIdx = 0;
+  if(!allHaveBest || n===0) return;
+  if(n < 5){
+    for(var i=0;i<n;i++) for(var j=0;j<n;j++) if(i!==j)
+      app.relayPhase.pairs.push({ runner1Idx:i, runner2Idx:j,
+        attempts:[], lastRunAt:null, wantsRetry:false, kept:false });
+    return;
+  }
+  var order = app.players.map(function(_,i){ return i; })
+    .sort(function(a,b){ return app.players[a].bestSprint.time - app.players[b].bestSprint.time; });
+  for(var k=0;k<n;k++){
+    [1,2].forEach(function(d){
+      var starter = order[k], receiver = order[(k+d)%n];
+      app.relayPhase.pairs.push({ runner1Idx:starter, runner2Idx:receiver,
+        attempts:[], lastRunAt:null, wantsRetry:false, kept:false });
+    });
+  }
 }
 function stepInput(id,delta,min,max) {
   var el=document.getElementById(id); var v=parseFloat(el.value)||0;
   v=Math.min(max,Math.max(min,v+delta)); el.value=v;
   el.style.color='var(--accent3)'; setTimeout(function(){el.style.color='';},300);
+}
+function stepGroupSize(delta) {
+  stepInput('cfg-group-size', delta, 3, 30);
+  updateNameFields();
 }
 
 /* ── PERSISTENCE ── */
@@ -553,7 +584,7 @@ function saveSession() {
 function restoreSession(s) {
   app.cfg     = s.cfg;
   app.players = (s.players||[]).map(function(p){
-    return {name:p.name,color:p.color||COLORS[0],sprints:p.sprints||[],bestSprint:p.bestSprint||null};
+    return {name:p.name,color:p.color||colorForIndex(0,1),sprints:p.sprints||[],bestSprint:p.bestSprint||null};
   });
   var saved = s.relayPhase || {};
   // Restore pairs directly from snapshot (preserve attempts/results)
@@ -1374,6 +1405,8 @@ function keepSprintResult() {
 function goToRelay() {
   var missing = app.players.filter(function(p){ return !p.bestSprint; }).map(function(p){ return p.name; });
   if (missing.length > 0) { alert('Il manque un passage pour : ' + missing.join(', ')); return; }
+  if (!app.relayPhase.pairs.length) generateRelayPairs();
+  saveSession();
   startRelayPhase();
 }
 
