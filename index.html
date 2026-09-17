@@ -137,6 +137,17 @@ html,body{
 .data-table td{padding:10px 8px;border-bottom:1px solid var(--border);}
 
 .signature{position:absolute;bottom:72px;right:14px;font-size:.65rem;color:rgba(255,255,255,.15);letter-spacing:.3px;pointer-events:none;z-index:10;}
+
+/* ── TABLETTES EN PAYSAGE : exploiter la largeur de l'écran ── */
+@media (orientation:landscape) and (min-width:700px){
+  #app-root{ max-width:90vw; }
+  .card{ margin:12px 22px; }
+  #name-fields{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px 16px; }
+  #name-fields .input-group{ margin-bottom:0; }
+  #sprint-hub-list, #relay-hub-list{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:8px 12px; align-content:start; }
+  #sprint-hub-list > div, #relay-hub-list > div{ margin-bottom:0; }
+  .page > div[style*="padding:0 16px"]{ max-width:520px; margin-left:auto; margin-right:auto; }
+}
 </style>
 </head>
 <body>
@@ -245,6 +256,9 @@ html,body{
   <div class="card">
     <div class="card-title" id="relay-pair-title">Passage</div>
     <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:6px;" id="relay-roles-display"></div>
+    <div id="relay-next-prep" style="display:none;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);border-radius:10px;padding:8px 12px;margin:8px 0;text-align:center;font-size:.82rem;">
+      <span style="color:var(--accent5);font-weight:700;">🔜 Se préparer :</span> <span id="relay-next-prep-names"></span>
+    </div>
     <div style="background:var(--surface);border-radius:10px;padding:12px;margin:8px 0;">
       <p style="font-size:.8rem;color:var(--muted);text-align:center;margin-bottom:4px;">CIBLE À BATTRE</p>
       <div style="font-family:'Bebas Neue','Arial Black',sans-serif;font-size:2rem;text-align:center;color:var(--accent3);" id="relay-target">—</div>
@@ -761,37 +775,73 @@ function getRolesForRelay(pairIdx) {
   others.forEach(function(i,idx){ if(idx<extraRoles.length) roles[i]=extraRoles[idx]; });
   return roles;
 }
-function renderRelayHub() {
-  var pairs=app.relayPhase.pairs,html='';
-  pairs.forEach(function(pair,i){
-    var p1=app.players[pair.runner1Idx],p2=app.players[pair.runner2Idx];
-    var hasDone=pair.attempts.length>0;
-    var best=hasDone?pair.attempts.reduce(function(b,a){return a.totalTime<b.totalTime?a:b;},pair.attempts[0]):null;
-    var isKept=pair.kept,wantsRetry=pair.wantsRetry,isCurrent=(i===app.relayPhase.currentPairIdx);
-    var statusBadge='';
-    if(!hasDone) statusBadge='<span class="tag tag-cyan" style="font-size:.7rem;">À faire</span>';
-    else if(isKept) statusBadge='<span class="tag tag-green" style="font-size:.7rem;">🔒 '+best.totalTime.toFixed(1)+'s</span>';
-    else if(wantsRetry) statusBadge='<span class="tag tag-red" style="font-size:.7rem;">⏳ À refaire</span>';
-    else statusBadge='<span class="tag '+(best.betterThanCumul?'tag-green':'tag-red')+'" style="font-size:.7rem;">'+best.totalTime.toFixed(1)+'s '+(best.betterThanCumul?'✅':'⚠️')+'</span>';
-    var actionIcon=!hasDone?'▶':(isKept?'🔒':(wantsRetry?'⏳':'🔁'));
-    var borderColor=!hasDone?'var(--accent1)':best&&best.betterThanCumul?'var(--accent4)':'var(--accent3)';
-    html+='<div onclick="selectOrWarnPair('+i+')" style="'
-      +'background:'+(isCurrent?'rgba(56,189,248,.1)':'var(--surface)')+';'
-      +'border:1px solid '+(isCurrent?'var(--accent1)':'var(--border)')+';'
-      +'border-left:3px solid '+borderColor+';'
-      +'border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;'
-      +'display:flex;align-items:center;gap:8px;">'
-      +'<span style="width:8px;height:8px;border-radius:50%;background:'+p1.color+';flex-shrink:0;"></span>'
-      +'<span style="font-weight:700;font-size:.92rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+p1.name+' <span style="color:var(--muted);font-size:.8rem;">→</span> '+p2.name+'</span>'
-      +statusBadge
-      +(best?'<span style="font-size:.78rem;color:var(--muted);flex-shrink:0;">'+best.totalTime.toFixed(1)+'s</span>':'')
-      +'<span id="recup-'+i+'" style="font-size:.68rem;font-weight:700;display:none;flex-shrink:0;"></span>'
-      +'<span style="font-size:1.1rem;flex-shrink:0;">'+actionIcon+'</span>'
-      +'</div>';
+/* Les 4 rôles essentiels d'un passage : les 2 coureurs, le chronométreur, le starter
+   (sans l'observateur ni les élèves sans rôle) — utilisé sur l'écran de chrono. */
+function getCoreRolesForRelay(pairIdx) {
+  var pair=app.relayPhase.pairs[pairIdx];
+  var roles=getRolesForRelay(pairIdx);
+  var order=[pair.runner1Idx, pair.runner2Idx];
+  app.players.forEach(function(_,i){
+    if(i!==pair.runner1Idx && i!==pair.runner2Idx &&
+       (roles[i]==='Chronométreur ⏱' || roles[i]==='Starter 📢')) order.push(i);
   });
-  document.getElementById('relay-hub-list').innerHTML=html;
+  return order.map(function(i){ return {idx:i, role:roles[i]}; });
+}
+/* Le prochain passage pour lequel préparer 2 élèves : on cherche, dans l'ordre de la liste,
+   le prochain passage non terminé dont les 2 coureurs ne sont pas déjà mobilisés
+   (coureurs, starter ou chronométreur) sur le passage en cours ; à défaut, le tout prochain
+   passage non terminé, même s'il partage un élève avec le passage en cours. */
+function getNextPrepPairIdx(currentIdx) {
+  var pairs=app.relayPhase.pairs, n=pairs.length;
+  if(n<2) return -1;
+  var busy={}; Object.keys(getRolesForRelay(currentIdx)).forEach(function(i){ busy[i]=true; });
+  var fallback=-1;
+  for(var step=1; step<n; step++){
+    var idx=(currentIdx+step)%n, p=pairs[idx];
+    if(p.kept) continue;
+    if(fallback===-1) fallback=idx;
+    if(!busy[p.runner1Idx] && !busy[p.runner2Idx]) return idx;
+  }
+  return fallback;
+}
+function relayHubRowHTML(pair,i) {
+  var p1=app.players[pair.runner1Idx],p2=app.players[pair.runner2Idx];
+  var hasDone=pair.attempts.length>0;
+  var best=hasDone?pair.attempts.reduce(function(b,a){return a.totalTime<b.totalTime?a:b;},pair.attempts[0]):null;
+  var isKept=pair.kept,wantsRetry=pair.wantsRetry,isCurrent=(i===app.relayPhase.currentPairIdx);
+  var statusBadge='';
+  if(!hasDone) statusBadge='<span class="tag tag-cyan" style="font-size:.7rem;">À faire</span>';
+  else if(isKept) statusBadge='<span class="tag tag-green" style="font-size:.7rem;">🔒 '+best.totalTime.toFixed(1)+'s</span>';
+  else if(wantsRetry) statusBadge='<span class="tag tag-red" style="font-size:.7rem;">⏳ À refaire</span>';
+  else statusBadge='<span class="tag '+(best.betterThanCumul?'tag-green':'tag-red')+'" style="font-size:.7rem;">'+best.totalTime.toFixed(1)+'s '+(best.betterThanCumul?'✅':'⚠️')+'</span>';
+  var actionIcon=!hasDone?'▶':(isKept?'🔒':(wantsRetry?'⏳':'🔁'));
+  var borderColor=!hasDone?'var(--accent1)':best&&best.betterThanCumul?'var(--accent4)':'var(--accent3)';
+  return '<div id="pairrow-'+i+'" onclick="selectOrWarnPair('+i+')" style="'
+    +'background:'+(isCurrent?'rgba(56,189,248,.1)':'var(--surface)')+';'
+    +'border:1px solid '+(isCurrent?'var(--accent1)':'var(--border)')+';'
+    +'border-left:3px solid '+borderColor+';'
+    +'border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;'
+    +'display:flex;align-items:center;gap:8px;">'
+    +'<span style="width:8px;height:8px;border-radius:50%;background:'+p1.color+';flex-shrink:0;"></span>'
+    +'<span style="font-weight:700;font-size:.92rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+p1.name+' <span style="color:var(--muted);font-size:.8rem;">→</span> '+p2.name+'</span>'
+    +statusBadge
+    +(best?'<span style="font-size:.78rem;color:var(--muted);flex-shrink:0;">'+best.totalTime.toFixed(1)+'s</span>':'')
+    +'<span id="recup-'+i+'" style="font-size:.68rem;font-weight:700;display:none;flex-shrink:0;"></span>'
+    +'<span style="font-size:1.1rem;flex-shrink:0;">'+actionIcon+'</span>'
+    +'</div>';
+}
+function renderRelayHub() {
+  document.getElementById('relay-hub-list').innerHTML = app.relayPhase.pairs.map(relayHubRowHTML).join('');
   renderHubRolesCard();
   updateRelayHubTimers();
+}
+/* Met à jour une seule ligne de la liste (au lieu de tout reconstruire) — c'est ce qui
+   se produit le plus souvent (sélection, retour du chrono...) donc le clic reste instantané
+   même avec un grand groupe. */
+function updateRelayHubRow(i) {
+  var el=document.getElementById('pairrow-'+i);
+  if(!el){ renderRelayHub(); return; }
+  el.outerHTML = relayHubRowHTML(app.relayPhase.pairs[i], i);
 }
 /* Met à jour uniquement les compteurs de récupération, sans reconstruire toute la
    liste — évite de perdre un appui en cours lors du rafraîchissement automatique. */
@@ -815,7 +865,10 @@ function selectOrWarnPair(idx) {
   } else { selectRelayPair(idx); }
 }
 function selectRelayPair(idx) {
-  app.relayPhase.currentPairIdx=idx; renderRelayHub();
+  var prev=app.relayPhase.currentPairIdx;
+  app.relayPhase.currentPairIdx=idx;
+  updateRelayHubRow(prev); updateRelayHubRow(idx);
+  renderHubRolesCard();
   setTimeout(function(){var c=document.getElementById('relay-hub-roles-card');if(c)c.scrollIntoView({behavior:'smooth',block:'start'});},100);
 }
 function renderHubRolesCard() {
@@ -838,19 +891,26 @@ function backToRelayHub() {
   if(app.relayPhase.step>0&&app.relayPhase.step<4){
     openConfirm('Abandonner ?','Le chrono sera annulé.',function(){
       clearInterval(app.relayPhase.interval); app.relayPhase.running=false;
-      showPage('relay-hub'); renderRelayHub();
+      showPage('relay-hub'); updateRelayHubRow(app.relayPhase.currentPairIdx); renderHubRolesCard();
     });
-  } else { showPage('relay-hub'); renderRelayHub(); }
+  } else { showPage('relay-hub'); updateRelayHubRow(app.relayPhase.currentPairIdx); renderHubRolesCard(); }
 }
 
 /* ── RELAY CHRONO ── */
 function renderRelayRound(pairIdx) {
   var pair=app.relayPhase.pairs[pairIdx],p1=app.players[pair.runner1Idx],p2=app.players[pair.runner2Idx];
   document.getElementById('relay-pair-title').textContent=p1.name+' → '+p2.name+(pair.attempts.length>0?' (essai '+(pair.attempts.length+1)+')':'');
-  var roles=getRolesForRelay(pairIdx);
-  document.getElementById('relay-roles-display').innerHTML=app.players.map(function(pl,i){
-    return '<span class="role-badge" style="background:'+pl.color+';color:#000;font-size:.75rem;padding:4px 8px;">'+pl.name+' : '+(roles[i]||'—')+'</span>';
+  document.getElementById('relay-roles-display').innerHTML=getCoreRolesForRelay(pairIdx).map(function(e){
+    var pl=app.players[e.idx];
+    return '<span class="role-badge" style="background:'+pl.color+';color:#000;font-size:.75rem;padding:4px 8px;">'+pl.name+' : '+e.role+'</span>';
   }).join('');
+  var nextIdx=getNextPrepPairIdx(pairIdx), prepEl=document.getElementById('relay-next-prep');
+  if(nextIdx===-1){ prepEl.style.display='none'; }
+  else {
+    var np=app.relayPhase.pairs[nextIdx], n1=app.players[np.runner1Idx], n2=app.players[np.runner2Idx];
+    document.getElementById('relay-next-prep-names').textContent = n1.name+' (démarreur) et '+n2.name+' (relayeur)';
+    prepEl.style.display='';
+  }
   var b1=p1.bestSprint,b2=p2.bestSprint;
   if(b1&&b2){
     document.getElementById('relay-target').textContent=(b1.time+b2.time).toFixed(2)+' s';
@@ -1375,39 +1435,45 @@ function startSprintPhase() {
   renderSprintHub();
 }
 
-function renderSprintHub() {
-  var html = '';
-  var allKept = app.players.every(function(p){ return p.kept; });
-  app.players.forEach(function(p, i) {
-    var hasBest = !!p.bestSprint;
-    var isKept  = !!p.kept;
-    var borderColor = !hasBest ? 'var(--accent1)' : isKept ? 'var(--accent4)' : 'var(--accent3)';
-    var statusBadge = !hasBest
-      ? '<span class="tag tag-cyan" style="font-size:.7rem;">À faire</span>'
-      : isKept
-        ? '<span class="tag tag-green" style="font-size:.7rem;">🔒 ' + p.bestSprint.time.toFixed(2) + 's</span>'
-        : '<span class="tag tag-cyan" style="font-size:.7rem;">✏️ ' + p.bestSprint.time.toFixed(2) + 's</span>';
-    var actionIcon = !hasBest ? '▶' : isKept ? '🔒' : '🔁';
-
-    html += '<div onclick="selectOrWarnSprinter(' + i + ')" style="'
-      + 'background:var(--surface);border:1px solid var(--border);border-left:3px solid ' + borderColor + ';'
-      + 'border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;'
-      + 'display:flex;align-items:center;gap:10px;">'
-      + '<span style="width:36px;height:36px;border-radius:50%;background:' + p.color + '30;color:' + p.color + ';'
-      +   'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;">' + p.name[0] + '</span>'
-      + '<span style="flex:1;font-weight:700;font-size:.95rem;">' + p.name + '</span>'
-      + statusBadge
-      + (hasBest ? '<span style="font-size:.75rem;color:var(--muted);">' + p.bestSprint.speed.toFixed(2) + ' m/s</span>' : '')
-      + '<span style="font-size:1.1rem;flex-shrink:0;">' + actionIcon + '</span>'
-      + '</div>';
-  });
-
-  // Relay button: only enabled if all have a best
+function sprintHubRowHTML(p, i) {
+  var hasBest = !!p.bestSprint;
+  var isKept  = !!p.kept;
+  var borderColor = !hasBest ? 'var(--accent1)' : isKept ? 'var(--accent4)' : 'var(--accent3)';
+  var statusBadge = !hasBest
+    ? '<span class="tag tag-cyan" style="font-size:.7rem;">À faire</span>'
+    : isKept
+      ? '<span class="tag tag-green" style="font-size:.7rem;">🔒 ' + p.bestSprint.time.toFixed(2) + 's</span>'
+      : '<span class="tag tag-cyan" style="font-size:.7rem;">✏️ ' + p.bestSprint.time.toFixed(2) + 's</span>';
+  var actionIcon = !hasBest ? '▶' : isKept ? '🔒' : '🔁';
+  return '<div id="sprintrow-' + i + '" onclick="selectOrWarnSprinter(' + i + ')" style="'
+    + 'background:var(--surface);border:1px solid var(--border);border-left:3px solid ' + borderColor + ';'
+    + 'border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;'
+    + 'display:flex;align-items:center;gap:10px;">'
+    + '<span style="width:36px;height:36px;border-radius:50%;background:' + p.color + '30;color:' + p.color + ';'
+    +   'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;">' + p.name[0] + '</span>'
+    + '<span style="flex:1;font-weight:700;font-size:.95rem;">' + p.name + '</span>'
+    + statusBadge
+    + (hasBest ? '<span style="font-size:.75rem;color:var(--muted);">' + p.bestSprint.speed.toFixed(2) + ' m/s</span>' : '')
+    + '<span style="font-size:1.1rem;flex-shrink:0;">' + actionIcon + '</span>'
+    + '</div>';
+}
+function updateSprintRelayButtonState() {
   var allHaveBest = app.players.every(function(p){ return p.bestSprint !== null; });
-  document.getElementById('sprint-hub-list').innerHTML = html;
   var relayBtn = document.getElementById('btn-sprint-to-relay');
   relayBtn.style.opacity = allHaveBest ? '1' : '.4';
   relayBtn.style.pointerEvents = allHaveBest ? 'auto' : 'none';
+}
+function renderSprintHub() {
+  document.getElementById('sprint-hub-list').innerHTML = app.players.map(sprintHubRowHTML).join('');
+  updateSprintRelayButtonState();
+}
+/* Met à jour une seule ligne au lieu de reconstruire toute la liste — garde le clic
+   instantané même pour un groupe de 15 élèves. */
+function updateSprintHubRow(idx) {
+  var el = document.getElementById('sprintrow-' + idx);
+  if (!el) { renderSprintHub(); return; }
+  el.outerHTML = sprintHubRowHTML(app.players[idx], idx);
+  updateSprintRelayButtonState();
 }
 
 function selectOrWarnSprinter(idx) {
@@ -1448,7 +1514,7 @@ function keepSprintResult() {
   app.players[idx].kept = true;
   saveSession();
   showPage('sprint-hub');
-  renderSprintHub();
+  updateSprintHubRow(idx);
 }
 
 function goToRelay() {
