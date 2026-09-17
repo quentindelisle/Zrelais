@@ -292,6 +292,7 @@ html,body{
   <div class="card"><div class="card-title">🔄 Passages en relais</div><div id="results-relay-passes"></div></div>
   <div style="padding:0 16px;display:flex;flex-direction:column;gap:12px;">
     <button class="btn btn-warn" onclick="generateGroupQR()">📱 Générer les QR Codes</button>
+    <button class="btn btn-success" onclick="exportGroupXLS()">📊 Exporter en Excel</button>
     <button class="btn btn-ghost" onclick="goToSetup()">🔁 Nouvelle session</button>
   </div>
 </div>
@@ -754,27 +755,19 @@ function startRelayPhase() { app.relayPhase.currentPairIdx=0; showPage('relay-hu
 function getRolesForRelay(pairIdx) {
   var pair=app.relayPhase.pairs[pairIdx],roles={};
   roles[pair.runner1Idx]='Démarreur 🚦'; roles[pair.runner2Idx]='Relayeur 🏃';
-  app.players.forEach(function(_,i){
-    if(i!==pair.runner1Idx&&i!==pair.runner2Idx){
-      if(!Object.values(roles).join('').includes('Chronométreur')) roles[i]='Chronométreur ⏱';
-      else roles[i]='Starter 📢';
-    }
-  });
+  var extraRoles=['Chronométreur ⏱','Starter 📢','Observateur 👀'];
+  var others=app.players.map(function(_,i){return i;})
+    .filter(function(i){return i!==pair.runner1Idx&&i!==pair.runner2Idx;});
+  others.forEach(function(i,idx){ if(idx<extraRoles.length) roles[i]=extraRoles[idx]; });
   return roles;
 }
 function renderRelayHub() {
-  var pairs=app.relayPhase.pairs,now=Date.now(),html='';
+  var pairs=app.relayPhase.pairs,html='';
   pairs.forEach(function(pair,i){
     var p1=app.players[pair.runner1Idx],p2=app.players[pair.runner2Idx];
     var hasDone=pair.attempts.length>0;
     var best=hasDone?pair.attempts.reduce(function(b,a){return a.totalTime<b.totalTime?a:b;},pair.attempts[0]):null;
     var isKept=pair.kept,wantsRetry=pair.wantsRetry,isCurrent=(i===app.relayPhase.currentPairIdx);
-    var recupHtml='';
-    if(pair.lastRunAt){
-      var sec=Math.floor((now-pair.lastRunAt)/1000),min=Math.floor(sec/60),s=sec%60;
-      var col=sec>=120?'var(--accent4)':sec>=60?'var(--accent3)':'var(--accent2)';
-      recupHtml='<span style="font-size:.68rem;color:'+col+';font-weight:700;">⏱'+(min>0?min+'m':'')+s+'s</span>';
-    }
     var statusBadge='';
     if(!hasDone) statusBadge='<span class="tag tag-cyan" style="font-size:.7rem;">À faire</span>';
     else if(isKept) statusBadge='<span class="tag tag-green" style="font-size:.7rem;">🔒 '+best.totalTime.toFixed(1)+'s</span>';
@@ -792,12 +785,27 @@ function renderRelayHub() {
       +'<span style="font-weight:700;font-size:.92rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+p1.name+' <span style="color:var(--muted);font-size:.8rem;">→</span> '+p2.name+'</span>'
       +statusBadge
       +(best?'<span style="font-size:.78rem;color:var(--muted);flex-shrink:0;">'+best.totalTime.toFixed(1)+'s</span>':'')
-      +(recupHtml?'<span style="flex-shrink:0;">'+recupHtml+'</span>':'')
+      +'<span id="recup-'+i+'" style="font-size:.68rem;font-weight:700;display:none;flex-shrink:0;"></span>'
       +'<span style="font-size:1.1rem;flex-shrink:0;">'+actionIcon+'</span>'
       +'</div>';
   });
   document.getElementById('relay-hub-list').innerHTML=html;
   renderHubRolesCard();
+  updateRelayHubTimers();
+}
+/* Met à jour uniquement les compteurs de récupération, sans reconstruire toute la
+   liste — évite de perdre un appui en cours lors du rafraîchissement automatique. */
+function updateRelayHubTimers() {
+  var now=Date.now();
+  app.relayPhase.pairs.forEach(function(pair,i){
+    var el=document.getElementById('recup-'+i);
+    if(!el) return;
+    if(!pair.lastRunAt){ el.style.display='none'; return; }
+    var sec=Math.floor((now-pair.lastRunAt)/1000),min=Math.floor(sec/60),s=sec%60;
+    var col=sec>=120?'var(--accent4)':sec>=60?'var(--accent3)':'var(--accent2)';
+    el.style.color=col; el.style.display='';
+    el.textContent='⏱'+(min>0?min+'m':'')+s+'s';
+  });
 }
 function selectOrWarnPair(idx) {
   if(app.relayPhase.pairs[idx].kept){
@@ -970,7 +978,7 @@ function renderRelayHistory() {
   list.innerHTML=html;
 }
 function goToFinalResults() { showPage('results'); renderResults(); }
-setInterval(function(){ if(app.currentPage==='relay-hub') renderRelayHub(); },10000);
+setInterval(function(){ if(app.currentPage==='relay-hub') updateRelayHubTimers(); },10000);
 
 /* ── RESULTS ── */
 function renderResults() {
@@ -1000,6 +1008,47 @@ function renderResults() {
       +pair.attempts.length+' essai(s) — '+(best.betterThanCumul?'✅ Mieux que le cumulé':'❌ Pas encore mieux')+'</div></div>';
   });
   document.getElementById('results-relay-passes').innerHTML=relays;
+}
+
+/* ── EXPORT EXCEL ── */
+function xlsEscape(v){
+  return String(v===undefined||v===null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function xlsCell(v){
+  if(typeof v==='number'&&isFinite(v)) return '<Cell><Data ss:Type="Number">'+v+'</Data></Cell>';
+  return '<Cell><Data ss:Type="String">'+xlsEscape(v)+'</Data></Cell>';
+}
+function xlsRow(cells){ return '<Row>'+cells.map(xlsCell).join('')+'</Row>'; }
+function xlsSheet(name, headerRow, dataRows){
+  return '<Worksheet ss:Name="'+xlsEscape(name)+'"><Table>'
+    + '<Row>'+headerRow.map(function(h){return '<Cell><Data ss:Type="String"><B>'+xlsEscape(h)+'</B></Data></Cell>';}).join('')+'</Row>'
+    + dataRows.map(xlsRow).join('')
+    + '</Table></Worksheet>';
+}
+function exportGroupXLS() {
+  if(!app.players.length){ alert('Aucune donnée à exporter.'); return; }
+  var sprintHeader=['Élève','Distance (m)','Meilleur temps (s)','Vitesse (m/s)','Essais'];
+  var sprintRows=app.players.map(function(p){
+    var b=p.bestSprint;
+    return [p.name, app.cfg.sprintDist, b?+b.time.toFixed(2):'', b?+b.speed.toFixed(2):'', p.sprints.length];
+  });
+  var relayHeader=['Démarreur','Relayeur','Meilleur temps total (s)','Temps zone (s)','Vit. relais (m/s)','Vit. zone (m/s)','Mieux que cumulé','Essais'];
+  var relayRows=app.relayPhase.pairs.map(function(pair){
+    var p1=app.players[pair.runner1Idx],p2=app.players[pair.runner2Idx];
+    if(!pair.attempts.length) return [p1.name,p2.name,'','','','','',0];
+    var best=pair.attempts.reduce(function(b,a){return a.totalTime<b.totalTime?a:b;},pair.attempts[0]);
+    return [p1.name,p2.name,+best.totalTime.toFixed(2),+best.zoneTime.toFixed(2),+best.relaySpeed.toFixed(2),+best.zoneSpeed.toFixed(2),best.betterThanCumul?'Oui':'Non',pair.attempts.length];
+  });
+  var xml='<?xml version="1.0"?>'
+    + '<?mso-application progid="Excel.Sheet"?>'
+    + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+    + xlsSheet('Sprints', sprintHeader, sprintRows)
+    + xlsSheet('Relais', relayHeader, relayRows)
+    + '</Workbook>';
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([xml],{type:'application/vnd.ms-excel'}));
+  a.download='ZonesRelais-'+app.players.map(function(p){return p.name;}).join('-')+'-'+new Date().toLocaleDateString('fr-FR').replace(/\//g,'-')+'.xls';
+  a.click();
 }
 
 /* ── QR CODES ── */
